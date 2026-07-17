@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 title Whisper Transcriber - Installatie
 cd /d "%~dp0"
 
@@ -9,8 +9,23 @@ echo   Dit hoef je maar EENMALIG te doen.
 echo ============================================================
 echo.
 
-where python >nul 2>nul
-if errorlevel 1 (
+set "PYTHON_EXE="
+
+rem De Python launcher (py.exe) wordt door de officiele installer meegeleverd
+rem en heeft, in tegenstelling tot "python", geen nep-alias van de Microsoft
+rem Store. Probeer die als eerste.
+py -3 -c "import sys" >nul 2>nul
+if not errorlevel 1 set "PYTHON_EXE=py -3"
+
+rem Val terug op "python", maar controleer dat het ook echt werkt: als er
+rem geen Python geinstalleerd is, staat er standaard een nep-python.exe van
+rem de Microsoft Store in PATH die alleen de Store opent en niets doet.
+if not defined PYTHON_EXE (
+    python -c "import sys" >nul 2>nul
+    if not errorlevel 1 set "PYTHON_EXE=python"
+)
+
+if not defined PYTHON_EXE (
     echo Python is niet gevonden op deze computer.
     echo.
     echo Er wordt geprobeerd Python automatisch te installeren via Windows...
@@ -24,20 +39,48 @@ if errorlevel 1 (
         pause
         exit /b 1
     )
-    echo.
-    echo Python is geinstalleerd. Sluit dit venster en start install.bat opnieuw
-    echo zodat Windows de installatie herkent.
-    pause
-    exit /b 0
+
+    rem PATH is in dit venster nog niet ververst na de installatie, dus we
+    rem zoeken de zojuist geinstalleerde python.exe op de standaardlocatie.
+    set "PYTHON_EXE="
+    if exist "%LocalAppData%\Programs\Python\Python312\python.exe" (
+        set "PYTHON_EXE=%LocalAppData%\Programs\Python\Python312\python.exe"
+    )
+    if not defined PYTHON_EXE (
+        echo.
+        echo Python is geinstalleerd, maar dit venster moet opnieuw gestart worden
+        echo om dit te herkennen. Sluit dit venster en dubbelklik nogmaals op
+        echo install.bat.
+        pause
+        exit /b 0
+    )
 )
 
+echo Python gevonden: !PYTHON_EXE!
+echo.
+
 echo [1/3] Virtuele omgeving aanmaken...
-python -m venv venv
+!PYTHON_EXE! -m venv venv
+if not exist "venv\Scripts\python.exe" (
+    echo.
+    echo Het aanmaken van de virtuele omgeving is mislukt.
+    pause
+    exit /b 1
+)
 
 echo [2/3] Benodigde onderdelen installeren (dit kan enkele minuten duren)...
 call venv\Scripts\python.exe -m pip install --upgrade pip >nul
-call venv\Scripts\pip.exe install -r requirements.txt
-if errorlevel 1 (
+
+rem Antivirussoftware scant nieuw geschreven bestanden soms even, waardoor
+rem pip ze kortstondig niet kan wegschrijven. Probeer daarom een paar keer.
+set "INSTALL_OK="
+for /l %%i in (1,1,3) do (
+    if not defined INSTALL_OK (
+        call venv\Scripts\pip.exe install -r requirements.txt
+        if not errorlevel 1 set "INSTALL_OK=1"
+    )
+)
+if not defined INSTALL_OK (
     echo.
     echo Er ging iets mis bij het installeren. Controleer je internetverbinding
     echo en start install.bat opnieuw.
