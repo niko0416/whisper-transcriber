@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcriberen</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --border: #e2e4e9;
+    --text: #1c1e21;
+    --text-dim: #6b7280;
+    --accent: #4f46e5;
+    --accent-dark: #4338ca;
+    --ok: #059669;
+    --err: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 24px 8px;
+    text-align: center;
+  }
+  header h1 { margin: 0; font-size: 26px; font-weight: 700; }
+  header p { margin: 6px 0 0; color: var(--text-dim); font-size: 14px; }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 20px 20px 60px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .dropzone {
+    border: 2px dashed #c7c9d1;
+    border-radius: 12px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.dragover { border-color: var(--accent); background: #eef0ff; }
+  .dropzone svg { width: 36px; height: 36px; color: var(--accent); margin-bottom: 8px; }
+  .dropzone .filename { margin-top: 10px; font-weight: 600; color: var(--accent-dark); word-break: break-all; }
+  .dropzone .hint { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+  input[type=file] { display: none; }
+
+  .row { display: flex; gap: 16px; margin-top: 20px; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 200px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-dim); }
+  select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .model-desc { font-size: 12px; color: var(--text-dim); margin-top: 6px; min-height: 16px; }
+
+  button.primary {
+    margin-top: 22px;
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button.primary:hover { background: var(--accent-dark); }
+  button.primary:disabled { background: #a5a6f5; cursor: not-allowed; }
+
+  .status { margin-top: 14px; font-size: 14px; text-align: center; min-height: 20px; }
+  .status.busy { color: var(--accent-dark); }
+  .status.error { color: var(--err); }
+  .status.done { color: var(--ok); }
+
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #c7c9d1;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: -2px;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #resultPanel { display: none; }
+  textarea#resultText {
+    width: 100%;
+    min-height: 220px;
+    resize: vertical;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 14px;
+    line-height: 1.5;
+    font-family: inherit;
+  }
+  .result-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .result-actions button {
+    flex: 1;
+    min-width: 140px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .result-actions button:hover { background: #f0f1f5; }
+
+  footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    padding-bottom: 30px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎙️ Transcriberen</h1>
+  <p>Sleep een audio- of video-bestand hierin en zet het om naar tekst — alles lokaal op deze computer.</p>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="dropzone" id="dropzone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+      <div>Klik hier of sleep een bestand in dit vak</div>
+      <div class="hint">mp3, wav, m4a, mp4, mov ... (audio of video)</div>
+      <div class="filename" id="filename"></div>
+    </div>
+    <input type="file" id="fileInput" accept="audio/*,video/*">
+
+    <div class="row">
+      <div class="field">
+        <label for="modelSelect">Model</label>
+        <select id="modelSelect">
+          {% for key, info in models.items() %}
+          <option value="{{ key }}" {% if key == 'base' %}selected{% endif %}>{{ info.label }}</option>
+          {% endfor %}
+        </select>
+        <div class="model-desc" id="modelDesc"></div>
+      </div>
+      <div class="field">
+        <label for="langSelect">Taal</label>
+        <select id="langSelect">
+          <option value="">Automatisch herkennen</option>
+          <option value="nl">Nederlands</option>
+          <option value="en">Engels</option>
+          <option value="de">Duits</option>
+          <option value="fr">Frans</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="primary" id="startBtn" disabled>Start transcriptie</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel" id="resultPanel">
+    <label>Resultaat</label>
+    <textarea id="resultText" readonly></textarea>
+    <div class="result-actions">
+      <button id="copyBtn">📋 Kopieer tekst</button>
+      <button id="downloadTxtBtn">⬇️ Download als .txt</button>
+      <button id="downloadSrtBtn">⬇️ Download als ondertiteling (.srt)</button>
+    </div>
+  </div>
+</div>
+
+<footer>Whisper Transcriber &middot; draait volledig lokaal, niets wordt online opgeslagen</footer>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const filenameEl = document.getElementById('filename');
+const startBtn = document.getElementById('startBtn');
+const statusEl = document.getElementById('status');
+const modelSelect = document.getElementById('modelSelect');
+const modelDesc = document.getElementById('modelDesc');
+const langSelect = document.getElementById('langSelect');
+const resultPanel = document.getElementById('resultPanel');
+const resultText = document.getElementById('resultText');
+
+let selectedFile = null;
+let lastSegments = [];
+
+const descriptions = {
+  tiny: "Zeer snel, ook op oudere computers. Prima voor een snelle ruwe tekst.",
+  base: "Goede balans tussen snelheid en nauwkeurigheid. Aanbevolen startpunt.",
+  small: "Duidelijk nauwkeuriger dan base, iets meer geduld nodig.",
+  medium: "Zeer nauwkeurig, kan op een computer zonder videokaart lang duren.",
+  turbo: "Nieuwste model: bijna zo nauwkeurig als de grootste modellen, maar veel sneller."
+};
+function updateModelDesc() {
+  modelDesc.textContent = descriptions[modelSelect.value] || "";
+}
+modelSelect.addEventListener('change', updateModelDesc);
+updateModelDesc();
+
+function setFile(file) {
+  selectedFile = file;
+  filenameEl.textContent = file ? "✅ " + file.name : "";
+  startBtn.disabled = !file;
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+
+['dragenter', 'dragover'].forEach(evt =>
+  dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('dragover'); })
+);
+['dragleave', 'drop'].forEach(evt =>
+  dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('dragover'); })
+);
+dropzone.addEventListener('drop', e => {
+  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+
+startBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  startBtn.disabled = true;
+  resultPanel.style.display = 'none';
+  statusEl.className = 'status busy';
+  statusEl.innerHTML = '<span class="spinner"></span>Bezig met transcriberen... dit kan enkele minuten duren, laat dit venster open.';
+
+  const formData = new FormData();
+  formData.append('audio', selectedFile);
+  formData.append('model', modelSelect.value);
+  formData.append('language', langSelect.value);
+
+  try {
+    const res = await fetch('/transcribe', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Onbekende fout');
+
+    resultText.value = data.text;
+    lastSegments = data.segments || [];
+    resultPanel.style.display = 'block';
+    statusEl.className = 'status done';
+    statusEl.textContent = '✅ Klaar! Herkende taal: ' + (data.language || 'onbekend');
+  } catch (err) {
+    statusEl.className = 'status error';
+    statusEl.textContent = '❌ ' + err.message;
+  } finally {
+    startBtn.disabled = false;
+  }
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  navigator.clipboard.writeText(resultText.value);
+});
+
+document.getElementById('downloadTxtBtn').addEventListener('click', () => {
+  downloadBlob(resultText.value, (selectedFile ? selectedFile.name.replace(/\.[^.]+$/, '') : 'transcriptie') + '.txt', 'text/plain');
+});
+
+function srtTimestamp(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  const ms = Math.round((sec - Math.floor(sec)) * 1000);
+  const pad = (n, l = 2) => String(n).padStart(l, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms, 3)}`;
+}
+
+document.getElementById('downloadSrtBtn').addEventListener('click', () => {
+  if (!lastSegments.length) return;
+  let srt = '';
+  lastSegments.forEach((seg, i) => {
+    srt += `${i + 1}\n${srtTimestamp(seg.start)} --> ${srtTimestamp(seg.end)}\n${seg.text}\n\n`;
+  });
+  downloadBlob(srt, (selectedFile ? selectedFile.name.replace(/\.[^.]+$/, '') : 'transcriptie') + '.srt', 'text/plain');
+});
+
+function downloadBlob(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
